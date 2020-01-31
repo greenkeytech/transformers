@@ -648,7 +648,7 @@ def main():
                 result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
             results.update(result)
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
+        with open(output_eval_file, "w", encoding="utf-8") as writer:
             for key in sorted(results.keys()):
                 writer.write("{} = {}\n".format(key, str(results[key])))
 
@@ -659,13 +659,13 @@ def main():
         result, predictions = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="test")
         # Save results
         output_test_results_file = os.path.join(args.output_dir, "test_results.txt")
-        with open(output_test_results_file, "w") as writer:
+        with open(output_test_results_file, "w", encoding="utf-8") as writer:
             for key in sorted(result.keys()):
                 writer.write("{} = {}\n".format(key, str(result[key])))
         # Save predictions
         output_test_predictions_file = os.path.join(args.output_dir, "test_predictions.txt")
-        with open(output_test_predictions_file, "w") as writer:
-            with open(os.path.join(args.data_dir, "test.txt"), "r") as f:
+        with open(output_test_predictions_file, "w", encoding="utf-8") as writer:
+            with open(os.path.join(args.data_dir, "test.txt"), "r", encoding="utf-8") as f:
                 example_id = 0
                 for line in f:
                     if line.startswith("-DOCSTART-") or line == "" or line == "\n":
