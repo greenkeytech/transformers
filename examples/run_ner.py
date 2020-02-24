@@ -158,7 +158,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     epochs_trained = 0
     steps_trained_in_current_epoch = 0
 
-    # Check if continuing training from a checkpoint - ensures checkoint is valid
+    # Check if continuing training from a checkpoint - ensures checkpoint is valid
     if os.path.exists(args.model_name_or_path) and args.model_name_or_path.split("-")[-1].split("/")[0].isdigit():
         # set global_step to global_step of last saved checkpoint from model path
         global_step = int(args.model_name_or_path.split("-")[-1].split("/")[0])
