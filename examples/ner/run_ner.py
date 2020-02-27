@@ -24,7 +24,7 @@ import random
 
 import numpy as np
 import torch
-from seqeval.metrics import f1_score, precision_score, recall_score
+from seqeval.metrics import f1_score, precision_score, recall_score, classification_report
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
@@ -165,10 +165,10 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     steps_trained_in_current_epoch = 0
     # Check if continuing training from a checkpoint
     if os.path.exists(args.model_name_or_path):
-        # set global_step to gobal_step of last saved checkpoint from model path
-        try:
+        # set global_step to global_step of last saved checkpoint from model path
+        if args.model_name_or_path.split("-")[-1].split("/")[0].isdigit():
             global_step = int(args.model_name_or_path.split("-")[-1].split("/")[0])
-        except ValueError:
+        else:
             global_step = 0
         epochs_trained = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
         steps_trained_in_current_epoch = global_step % (len(train_dataloader) // args.gradient_accumulation_steps)
@@ -183,7 +183,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     train_iterator = trange(
         epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
     )
-    set_seed(args)  # Added here for reproductibility
+    set_seed(args)  # Added here for reproducibility
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
@@ -334,6 +334,7 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         "precision": precision_score(out_label_list, preds_list),
         "recall": recall_score(out_label_list, preds_list),
         "f1": f1_score(out_label_list, preds_list),
+        "report": "\n" + classification_report(out_label_list, preds_list, digits=3),
     }
 
     logger.info("***** Eval results %s *****", prefix)
@@ -667,7 +668,7 @@ def main():
                 result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
             results.update(result)
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
+        with open(output_eval_file, "w", encoding="utf-8") as writer:
             for key in sorted(results.keys()):
                 writer.write("{} = {}\n".format(key, str(results[key])))
 
@@ -678,13 +679,13 @@ def main():
         result, predictions = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="test")
         # Save results
         output_test_results_file = os.path.join(args.output_dir, "test_results.txt")
-        with open(output_test_results_file, "w") as writer:
+        with open(output_test_results_file, "w", encoding="utf-8") as writer:
             for key in sorted(result.keys()):
                 writer.write("{} = {}\n".format(key, str(result[key])))
         # Save predictions
         output_test_predictions_file = os.path.join(args.output_dir, "test_predictions.txt")
-        with open(output_test_predictions_file, "w") as writer:
-            with open(os.path.join(args.data_dir, "test.txt"), "r") as f:
+        with open(output_test_predictions_file, "w", encoding="utf-8") as writer:
+            with open(os.path.join(args.data_dir, "test.txt"), "r", encoding="utf-8") as f:
                 example_id = 0
                 for line in f:
                     if line.startswith("-DOCSTART-") or line == "" or line == "\n":
