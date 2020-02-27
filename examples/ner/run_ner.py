@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
@@ -515,6 +516,9 @@ def main():
     parser.add_argument(
         "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
+    parser.add_argument(
+        "--has_new_labels", action="store_true", help="Tells the trainer that more labels are present than in the pretrained model."
+    )
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
     parser.add_argument(
@@ -596,13 +600,6 @@ def main():
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-    config = config_class.from_pretrained(
-        args.config_name if args.config_name else args.model_name_or_path,
-        num_labels=num_labels,
-        id2label={str(i): label for i, label in enumerate(labels)},
-        label2id={label: i for i, label in enumerate(labels)},
-        cache_dir=args.cache_dir if args.cache_dir else None,
-    )
     tokenizer_args = {k: v for k, v in vars(args).items() if v is not None and k in TOKENIZER_ARGS}
     logger.info("Tokenizer arguments: %s", tokenizer_args)
     tokenizer = tokenizer_class.from_pretrained(
@@ -610,12 +607,75 @@ def main():
         cache_dir=args.cache_dir if args.cache_dir else None,
         **tokenizer_args,
     )
-    model = model_class.from_pretrained(
-        args.model_name_or_path,
-        from_tf=bool(".ckpt" in args.model_name_or_path),
-        config=config,
-        cache_dir=args.cache_dir if args.cache_dir else None,
-    )
+
+    if args.has_new_labels and os.path.exists(args.model_name_or_path):
+        old_config = config_class.from_pretrained(
+            args.config_name if args.config_name else args.model_name_or_path,
+            cache_dir=args.cache_dir if args.cache_dir else None,
+        )
+        old_model = model_class.from_pretrained(
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=old_config,
+            cache_dir=args.cache_dir if args.cache_dir else None,
+        )
+        old_num_labels = old_config.num_labels
+        new_labels = [label for label in labels if label not in old_config.label2id.keys()]
+        id2label = {**old_config.id2label, **{i + old_num_labels: label for i, label in enumerate(new_labels)}}
+        label2id = {**old_config.label2id, **{label: i + old_num_labels for i, label in enumerate(new_labels)}}
+        config = config_class.from_pretrained(
+            args.config_name if args.config_name else args.model_name_or_path,
+            num_labels=num_labels,
+            id2label=id2label,
+            label2id=label2id,
+            cache_dir=args.cache_dir if args.cache_dir else None,
+        )
+
+        model = BertForTokenClassification(config)
+
+        params_old = old_model.named_parameters()
+        params_new = model.named_parameters()
+        dict_params_old = dict(params_old)
+        dict_params_new = dict(params_new)
+        old_labels = list(old_config.label2id.keys())
+        new_labels = list(config.label2id.keys())
+        logger.info("Old labels %s", old_labels)
+        logger.info("New labels %s", new_labels)
+        sort_keys = np.argsort(new_labels)
+        for param_name, param_old in dict_params_old.items():
+            if param_name in dict_params_new:
+                if param_name.startswith('classifier'):
+                    # not only do the dimensions differ when adding a new label
+                    # but something resorts the labels (apparently alphabetically)
+                    # and uses that resorted list to determine the matrix structure
+                    # so we should apply that logic here explicitly
+                    for target_idx, current_idx in enumerate(sort_keys):
+                        target_label = new_labels[current_idx]
+                        if target_label in old_labels:
+                            idx_in_old_weights = old_labels.index(target_label)
+                            dict_params_new[param_name].data[target_idx].copy_(param_old.data[idx_in_old_weights])
+                else:
+                    dict_params_new[param_name].data.copy_(param_old.data)
+
+        model.load_state_dict(dict_params_new)
+
+    elif args.has_new_labels:
+        raise Exception("You have specified you're adding new labels but not provided a base model")
+    else:
+        config = config_class.from_pretrained(
+            args.config_name if args.config_name else args.model_name_or_path,
+            num_labels=num_labels,
+            id2label={str(i): label for i, label in enumerate(labels)},
+            label2id={label: i for i, label in enumerate(labels)},
+            cache_dir=args.cache_dir if args.cache_dir else None,
+        )
+
+        model = model_class.from_pretrained(
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            cache_dir=args.cache_dir if args.cache_dir else None,
+        )
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
