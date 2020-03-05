@@ -631,7 +631,7 @@ def main():
             cache_dir=args.cache_dir if args.cache_dir else None,
         )
 
-        model = BertForTokenClassification(config)
+        model = model_class(config)
 
         params_old = old_model.named_parameters()
         params_new = model.named_parameters()
