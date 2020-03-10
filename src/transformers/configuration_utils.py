@@ -70,6 +70,7 @@ class PretrainedConfig(object):
         # Parameters for sequence generation
         self.max_length = kwargs.pop("max_length", 20)
         self.do_sample = kwargs.pop("do_sample", False)
+        self.early_stopping = kwargs.pop("early_stopping", False)
         self.num_beams = kwargs.pop("num_beams", 1)
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
@@ -97,6 +98,18 @@ class PretrainedConfig(object):
             except AttributeError as err:
                 logger.error("Can't set {} with value {} for {}".format(key, value, self))
                 raise err
+
+    @property
+    def num_labels(self):
+        return self._num_labels
+
+    @num_labels.setter
+    def num_labels(self, num_labels):
+        self._num_labels = num_labels
+        self.id2label = {i: "LABEL_{}".format(i) for i in range(self.num_labels)}
+        self.id2label = dict((int(key), value) for key, value in self.id2label.items())
+        self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
+        self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
 
     def save_pretrained(self, save_directory):
         """

@@ -29,7 +29,7 @@ if is_torch_available():
     from transformers import (
         AutoModelForSequenceClassification,
         BartModel,
-        BartForMaskedLM,
+        BartForConditionalGeneration,
         BartForSequenceClassification,
         BartConfig,
     )
@@ -37,6 +37,7 @@ if is_torch_available():
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         shift_tokens_right,
         _prepare_bart_decoder_inputs,
+        LARGE_NEGATIVE,
     )
     from transformers.tokenization_bart import BartTokenizer
 
@@ -97,7 +98,9 @@ def prepare_bart_inputs_dict(
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BartModel, BartForMaskedLM, BartForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (BartModel, BartForConditionalGeneration, BartForSequenceClassification) if is_torch_available() else ()
+    )
     is_encoder_decoder = True
     # TODO(SS): fix the below in a separate PR
     test_pruning = False
@@ -221,8 +224,8 @@ class BartHeadTests(unittest.TestCase):
 
     def test_lm_forward(self):
         config, input_ids, batch_size = self._get_config_and_data(output_past=False)
-        decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size)
-        lm_model = BartForMaskedLM(config)
+        decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
+        lm_model = BartForConditionalGeneration(config)
         lm_model.to(torch_device)
         loss, logits, enc_features = lm_model.forward(
             input_ids=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids
@@ -243,15 +246,15 @@ class BartHeadTests(unittest.TestCase):
             decoder_ffn_dim=32,
             max_position_embeddings=48,
         )
-        lm_model = BartForMaskedLM(config)
-        context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long()
-        summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long()
-        logits, enc_features = lm_model.forward(input_ids=context, decoder_input_ids=summary)
+        lm_model = BartForConditionalGeneration(config).to(torch_device)
+        context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
+        summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
+        loss, logits, enc_features = lm_model.forward(input_ids=context, decoder_input_ids=summary, lm_labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
 
     def test_generate_beam_search(self):
-        input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long()
+        input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long().to(torch_device)
         config = BartConfig(
             vocab_size=self.vocab_size,
             d_model=24,
@@ -264,7 +267,7 @@ class BartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
             output_past=True,
         )
-        lm_model = BartForMaskedLM(config)
+        lm_model = BartForConditionalGeneration(config).to(torch_device)
         lm_model.eval()
 
         new_input_ids = lm_model.generate(
@@ -293,6 +296,45 @@ class BartHeadTests(unittest.TestCase):
         for ex, desired_result in zip(examples, fairseq_results):
             bart_toks = tokenizer.encode(ex, return_tensors="pt")
             _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
+
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_generate_fp16(self):
+        config, input_ids, batch_size = self._get_config_and_data(output_past=True)
+        attention_mask = input_ids.ne(1)
+        lm_model = BartForConditionalGeneration(config).eval().to(torch_device).half()
+        lm_model.generate(input_ids, attention_mask)
+
+    def test_prepare_bart_decoder_inputs(self):
+        config, *_ = self._get_config_and_data(output_past=False)
+        input_ids = _long_tensor(([4, 4, 2]))  # only used for .device if decoder_input_ids is passed
+        decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
+        ignore = LARGE_NEGATIVE
+        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(config, input_ids, decoder_input_ids)
+        expected_mask = torch.tensor(
+            [
+                [0, ignore, ignore],
+                [0, 0, ignore],
+                [ignore, ignore, ignore],  # never attend to the final token, because its pad
+            ]
+        ).to(input_ids.device)
+        self.assertEqual(decoder_attn_mask.size(), (1, 1, 3, 3))
+        self.assertTrue(torch.eq(expected_mask, decoder_attn_mask).all())
+
+        # Test no causal mask
+        config, *_ = self._get_config_and_data(output_past=True)
+        expected_just_padding_mask = torch.tensor(
+            [[0, 0, 0], [0, 0, 0], [ignore, ignore, ignore]]  # never attend to the final token, because its pad
+        ).to(input_ids.device)
+        _, decoder_attn_mask_no_causal_mask = _prepare_bart_decoder_inputs(config, input_ids, decoder_input_ids)
+        self.assertEqual(decoder_attn_mask_no_causal_mask.size(), (1, 1, 3, 3))
+        self.assertTrue(torch.eq(expected_just_padding_mask, decoder_attn_mask_no_causal_mask).all())
+
+        decoder_input_ids = _long_tensor([[0, 26388, 4133, 2]])
+        # Attend to everything if no pad tokens and no causal mask
+        _, decoder_attn_mask_no_padding_no_causal_mask = _prepare_bart_decoder_inputs(
+            config, input_ids, decoder_input_ids
+        )
+        self.assertTrue(torch.eq(decoder_attn_mask_no_padding_no_causal_mask, 0).all())
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
@@ -369,7 +411,7 @@ class BartModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_cnn_summarization_same_as_fairseq(self):
-        hf = BartForMaskedLM.from_pretrained("bart-large-cnn", output_past=True,).to(torch_device)
+        hf = BartForConditionalGeneration.from_pretrained("bart-large-cnn", output_past=True,).to(torch_device)
         tok = BartTokenizer.from_pretrained("bart-large")
         text = " (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian"
         tokens = tok.encode(text, return_tensors="pt").to(torch_device)
