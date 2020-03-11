@@ -19,7 +19,7 @@ import logging
 import os
 
 from torch import nn
-
+from .configuration_auto import AutoConfig
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 
 
@@ -109,7 +109,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         Examples::
 
             # For example purposes. Not runnable.
-            model = PreTrainedEncoderDecoder.from_pretained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
+            model = PreTrainedEncoderDecoder.from_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
         """
 
         # keyword arguments come in 3 flavors: encoder-specific (prefixed by
@@ -148,8 +148,10 @@ class PreTrainedEncoderDecoder(nn.Module):
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
+            decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+            decoder_config.is_decoder = True
+            kwargs_decoder["config"] = decoder_config
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
-        decoder.config.is_decoder = True
 
         model = cls(encoder, decoder)
 
