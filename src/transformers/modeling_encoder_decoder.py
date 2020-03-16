@@ -265,6 +265,10 @@ class PreTrainedEncoderDecoder(nn.Module):
                 for argument, value in kwargs.items()   
                 if argument.startswith("decoder_")  
             }   
-        )   
-        decoder_kwargs["encoder_attention_mask"] = encoder_kwargs.get("attention_mask", None)   
+        )
+
+        # gpt2 throws error on decoder.forward if this is provided
+        # this is an attempt to work around that error
+        if "attention_mask" in encoder_kwargs:
+            decoder_kwargs["encoder_attention_mask"] = encoder_kwargs.get("attention_mask", None)   
         return encoder_kwargs, decoder_kwargs   
