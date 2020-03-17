@@ -232,7 +232,7 @@ class PreTrainedEncoderDecoder(nn.Module):
 
         if "GPT2" not in str(type(self.decoder)):
             kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        decoder_outputs = self.decoder(decoder_input_ids, **kwargs_decoder)
+        decoder_outputs = self.decoder(inputs_embeds=encoder_hidden_states, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
 
