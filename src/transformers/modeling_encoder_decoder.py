@@ -234,3 +234,37 @@ class PreTrainedEncoderDecoder(nn.Module):
         decoder_outputs = self.decoder(inputs_embeds=encoder_hidden_states, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
+
+
+    @staticmethod   
+    def prepare_model_kwargs(**kwargs): 
+        """ Prepare the encoder and decoder's keyword arguments.    
+        Keyword arguments come in 3 flavors:    
+        - encoder-specific (prefixed by `encoder_`) 
+        - decoder-specific (prefixed by `decoder_`) 
+        - those that apply to the model as whole.   
+        We let the specific kwargs override the common ones in case of  
+        conflict.   
+        """ 
+        kwargs_common = {   
+            argument: value 
+            for argument, value in kwargs.items()   
+            if not argument.startswith("encoder_") and not argument.startswith("decoder_")  
+        }   
+        decoder_kwargs = kwargs_common.copy()   
+        encoder_kwargs = kwargs_common.copy()   
+        encoder_kwargs.update(  
+            {   
+                argument[len("encoder_") :]: value  
+                for argument, value in kwargs.items()   
+                if argument.startswith("encoder_")  
+            }   
+        )   
+        decoder_kwargs.update(  
+            {   
+                argument[len("decoder_") :]: value  
+                for argument, value in kwargs.items()   
+                if argument.startswith("decoder_")  
+            }   
+        )
+        return encoder_kwargs, decoder_kwargs
