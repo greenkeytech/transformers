@@ -228,7 +228,9 @@ class PreTrainedEncoderDecoder(nn.Module):
         else:
             encoder_outputs = ()
 
-        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
+        if "BERT" in str(type(self.decoder)).upper():
+            kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
+
         decoder_outputs = self.decoder(decoder_input_ids, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
