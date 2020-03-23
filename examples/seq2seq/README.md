@@ -91,27 +91,66 @@ After training, the model will be both evaluated on development and test dataset
 
 #### Evaluation
 
-Evaluation on development dataset outputs the following for our example:
-```bash
-03/23/2020 16:12:05 - INFO - __main__ -   ***** Eval results  *****
-03/23/2020 16:12:05 - INFO - __main__ -     f1 = 0.9405
-03/23/2020 16:12:05 - INFO - __main__ -     loss = 0.18552476764907913
-03/23/2020 16:12:05 - INFO - __main__ -     precision = 0.9405
-03/23/2020 16:12:05 - INFO - __main__ -     recall = 0.9405
+Evaluation on development dataset outputs the following for our example with GPT2:
+```text
+f1 = 0.9405
+loss = 0.18552476764907913
 ```
 
-On the test dataset the following results could be achieved:
-```bash
-03/23/2020 16:12:25 - INFO - __main__ -   ***** Eval results  *****
-03/23/2020 16:12:25 - INFO - __main__ -     f1 = 0.9396875
-03/23/2020 16:12:25 - INFO - __main__ -     loss = 0.18529377321875284
-03/23/2020 16:12:25 - INFO - __main__ -     precision = 0.9396875
-03/23/2020 16:12:25 - INFO - __main__ -     recall = 0.9396875
+On the test dataset the following results are achieved after one epoch:
+```text
+f1 = 0.9396875
+loss = 0.18529377321875284
 ```
+
+The first few lines of the test_predictions.txt file are as follows:
+```text
+output: 24/02/
+output: 24/02/
+output: 300303/1975
+output: 21/04/1986
+output: 01/03/1985
+output: 30/11/1989
+output: 03//052018
+output: 20/08/1999
+output: 31/08/1989
+output: 24/02/
+```
+
+#### Comparison of different models
+
+BERT-base-uncased results are somewhat lower.
+
+After one epoch, the performance on the development dataset is as follows:
+```text
+f1 = 0.8642500000000001
+loss = 0.4942799447074769
+```
+
+And for the test dataset
+```text
+f1 = 0.864
+loss = 0.49328169888920254
+```
+
+With typical output as follows:
+```text
+output: 23 / / / / /
+output: 23 / / / /
+output: 15 / 12 / 1975
+output: 15 / 08 / 1986
+output: 03 / 07 / 1985
+output: 15 / 09 / 1989
+output: 23 / / / /
+output: 23 / / / 1999
+output: 15 / 09 / 1989
+output: 23 / / / /
+```
+The spacing here is enforced by the BERT tokenizer, which needs further tuning if arbitrary spacing is desired.
 
 ### Missing features
 - No test of Tensorflow version
 - PreTrainedEncoderDecoder needs greater test coverage
-- BERT models appear to completely fail for this task
 - Max length should be enforced
 - Attention could be used to improve the loss function calculation
+- Accuracy metrics could be filtered based on whether or not the pad token is incorporated
