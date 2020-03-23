@@ -93,14 +93,25 @@ After training, the model will be both evaluated on development and test dataset
 
 Evaluation on development dataset outputs the following for our example:
 ```bash
+03/23/2020 16:12:05 - INFO - __main__ -   ***** Eval results  *****
+03/23/2020 16:12:05 - INFO - __main__ -     f1 = 0.9405
+03/23/2020 16:12:05 - INFO - __main__ -     loss = 0.18552476764907913
+03/23/2020 16:12:05 - INFO - __main__ -     precision = 0.9405
+03/23/2020 16:12:05 - INFO - __main__ -     recall = 0.9405
 ```
 
 On the test dataset the following results could be achieved:
 ```bash
+03/23/2020 16:12:25 - INFO - __main__ -   ***** Eval results  *****
+03/23/2020 16:12:25 - INFO - __main__ -     f1 = 0.9396875
+03/23/2020 16:12:25 - INFO - __main__ -     loss = 0.18529377321875284
+03/23/2020 16:12:25 - INFO - __main__ -     precision = 0.9396875
+03/23/2020 16:12:25 - INFO - __main__ -     recall = 0.9396875
 ```
 
 ### Missing features
 - No test of Tensorflow version
 - PreTrainedEncoderDecoder needs greater test coverage
+- BERT models appear to completely fail for this task
 - Max length should be enforced
 - Attention could be used to improve the loss function calculation

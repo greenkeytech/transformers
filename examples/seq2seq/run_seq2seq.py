@@ -823,7 +823,14 @@ def main():
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
+
+        # since the config is prefaced with `tokenizer_`, Autotokenizer doesn't instatiate this correctly
+        config = AutoConfig.from_pretrained(
+            os.path.join(args.output_dir, "tokenizer_config.json")
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.output_dir, config=config, **tokenizer_args
+        )
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(
@@ -860,7 +867,14 @@ def main():
                 writer.write("{} = {}\n".format(key, str(results[key])))
 
     if args.do_predict and args.local_rank in [-1, 0]:
-        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
+
+        # since the config is prefaced with `tokenizer_`, Autotokenizer doesn't instatiate this correctly
+        config = AutoConfig.from_pretrained(
+            os.path.join(args.output_dir, "tokenizer_config.json")
+        )
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.output_dir, config=config, **tokenizer_args
+        )
         model = PreTrainedEncoderDecoder.from_pretrained(
             os.path.join(args.output_dir, "encoder"),
             os.path.join(args.output_dir, "decoder"),
