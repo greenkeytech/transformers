@@ -231,6 +231,6 @@ class PreTrainedEncoderDecoder(nn.Module):
         if "BERT" in str(type(self.decoder)).upper():
             kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
 
-        decoder_outputs = self.decoder(decoder_input_ids, **kwargs_decoder)
+        decoder_outputs = self.decoder(inputs_embeds=encoder_hidden_states, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
