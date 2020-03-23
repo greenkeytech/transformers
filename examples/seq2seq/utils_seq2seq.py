@@ -64,11 +64,7 @@ def read_examples_from_file(data_dir, mode):
             words = words.lstrip("input: ").strip()
             formatted_words = formatted_words.lstrip("output: ").strip()
             examples.append(
-                InputExample(
-                    guid="{}-{}".format(mode, guid_index),
-                    words=words,
-                    formatted_words=formatted_words,
-                )
+                InputExample(guid="{}-{}".format(mode, guid_index), words=words, formatted_words=formatted_words,)
             )
             guid_index += 1
     return examples
@@ -78,13 +74,7 @@ class InputFeatures(object):
     """A single set of features of data."""
 
     def __init__(
-        self,
-        encoder_input_ids,
-        decoder_input_ids,
-        input_mask,
-        output_mask,
-        segment_ids,
-        formatted_tokens,
+        self, encoder_input_ids, decoder_input_ids, input_mask, output_mask, segment_ids, formatted_tokens,
     ):
         self.encoder_input_ids = encoder_input_ids
         self.decoder_input_ids = decoder_input_ids
@@ -121,15 +111,11 @@ def convert_examples_to_features(
         formatted_tokens = tokenizer.tokenize(example.formatted_words)
 
         # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.
-        special_tokens_count = (
-            3 if model_type in ["roberta"] else (2 if model_type != "gpt2" else 0)
-        )
+        special_tokens_count = 3 if model_type in ["roberta"] else (2 if model_type != "gpt2" else 0)
 
         if len(tokens) > max_seq_length - special_tokens_count:
             tokens = tokens[: (max_seq_length - special_tokens_count)]
-            formatted_tokens = formatted_tokens[
-                : (max_seq_length - special_tokens_count)
-            ]
+            formatted_tokens = formatted_tokens[: (max_seq_length - special_tokens_count)]
 
         # The convention in BERT is:
         # (a) For sequence pairs:
@@ -191,19 +177,11 @@ def convert_examples_to_features(
         # pad from the left this time
         if model_type in ["xlnet"]:
             encoder_input_ids = ([pad_token] * input_padding_length) + encoder_input_ids
-            decoder_input_ids = (
-                [pad_token] * output_padding_length
-            ) + decoder_input_ids
-            input_mask = (
-                [0 if mask_padding_with_zero else 1] * input_padding_length
-            ) + input_mask
-            output_mask = (
-                [0 if mask_padding_with_zero else 1] * output_padding_length
-            ) + output_mask
+            decoder_input_ids = ([pad_token] * output_padding_length) + decoder_input_ids
+            input_mask = ([0 if mask_padding_with_zero else 1] * input_padding_length) + input_mask
+            output_mask = ([0 if mask_padding_with_zero else 1] * output_padding_length) + output_mask
             segment_ids = ([pad_token_segment_id] * input_padding_length) + segment_ids
-            formatted_tokens = (
-                [pad_token_label_id] * output_padding_length
-            ) + formatted_tokens
+            formatted_tokens = ([pad_token_label_id] * output_padding_length) + formatted_tokens
         # pad from the right this time
         else:
             encoder_input_ids += [pad_token] * input_padding_length
@@ -227,15 +205,9 @@ def convert_examples_to_features(
             logger.info("*** Example ***")
             logger.info("guid: %s", example.guid)
             logger.info("tokens: %s", " ".join([str(x) for x in tokens]))
-            logger.info(
-                "formatted_tokens: %s", " ".join([str(x) for x in formatted_tokens])
-            )
-            logger.info(
-                "encoder_input_ids: %s", " ".join([str(x) for x in encoder_input_ids])
-            )
-            logger.info(
-                "decoder_input_ids: %s", " ".join([str(x) for x in decoder_input_ids])
-            )
+            logger.info("formatted_tokens: %s", " ".join([str(x) for x in formatted_tokens]))
+            logger.info("encoder_input_ids: %s", " ".join([str(x) for x in encoder_input_ids]))
+            logger.info("decoder_input_ids: %s", " ".join([str(x) for x in decoder_input_ids]))
             logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
             logger.info("output_mask: %s", " ".join([str(x) for x in output_mask]))
             logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))

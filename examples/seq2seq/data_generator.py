@@ -59,9 +59,7 @@ CONSTANTS["months"] = {
     5: lambda: "may",
     6: lambda: "june" if random.random() > 0.7 else "jun",
     7: lambda: "july" if random.random() > 0.7 else "jul",
-    8: lambda: "august"
-    if random.random() > 0.9
-    else ("auggie" if random.random() > 0.5 else "aug"),
+    8: lambda: "august" if random.random() > 0.9 else ("auggie" if random.random() > 0.5 else "aug"),
     9: lambda: "september" if random.random() > 0.9 else "sept",
     10: lambda: "october" if random.random() > 0.7 else "oct",
     11: lambda: "november" if random.random() > 0.7 else "nov",
@@ -74,9 +72,7 @@ def month_num_to_abbrev(month_num):
 
 
 def ord(n):
-    return str(n) + (
-        "th" if 4 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    )
+    return str(n) + ("th" if 4 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th"))
 
 
 def day_num_to_str(day_num):
@@ -88,26 +84,18 @@ def day_num_to_str(day_num):
 
 
 def truncate_year(year_num):
-    return (
-        str(year_num)[-2:]
-        if year_num > 2000 and random.random() > 0.3
-        else str(year_num)
-    )
+    return str(year_num)[-2:] if year_num > 2000 and random.random() > 0.3 else str(year_num)
 
 
 def make_date():
     output = FAKE.date(pattern="%d/%m/%Y")
     day, month, year = map(int, output.split("/"))
-    inp = " ".join(
-        [day_num_to_str(day), month_num_to_abbrev(month), truncate_year(year)]
-    )
+    inp = " ".join([day_num_to_str(day), month_num_to_abbrev(month), truncate_year(year)])
     return (inp, output)
 
 
 def make_training_data(train_size=10000, dev_size=1000, test_size=1000):
-    for output, size in zip(
-        ("train", "dev", "test"), (train_size, dev_size, test_size)
-    ):
+    for output, size in zip(("train", "dev", "test"), (train_size, dev_size, test_size)):
         with open("{}.txt".format(output), "w") as output_file:
             for _ in range(size):
                 output_file.write("input: {}\noutput: {}\n".format(*make_date()))
