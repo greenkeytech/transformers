@@ -19,7 +19,7 @@ import logging
 import os
 
 from torch import nn
-
+from .configuration_auto import AutoConfig
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 
 
