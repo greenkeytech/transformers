@@ -19,6 +19,18 @@ else:
 
 import logging
 
+# Benchmarking
+from .benchmark_utils import (
+    Frame,
+    Memory,
+    MemoryState,
+    MemorySummary,
+    MemoryTrace,
+    UsedMemoryState,
+    bytes_to_human_readable,
+    start_memory_tracing,
+    stop_memory_tracing,
+)
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
 from .configuration_bart import BartConfig
@@ -101,6 +113,7 @@ from .pipelines import (
     Pipeline,
     PipelineDataFormat,
     QuestionAnsweringPipeline,
+    SummarizationPipeline,
     TextClassificationPipeline,
     TokenClassificationPipeline,
     pipeline,
@@ -210,6 +223,7 @@ if is_torch_available():
         BartForSequenceClassification,
         BartModel,
         BartForConditionalGeneration,
+        BART_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_roberta import (
         RobertaForMaskedLM,
@@ -219,14 +233,6 @@ if is_torch_available():
         RobertaForTokenClassification,
         RobertaForQuestionAnswering,
         ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
-    )
-    from .modeling_camembert import (
-        CamembertForMaskedLM,
-        CamembertModel,
-        CamembertForSequenceClassification,
-        CamembertForTokenClassification,
-        CamembertForQuestionAnswering,
-        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_distilbert import (
         DistilBertPreTrainedModel,
@@ -243,13 +249,14 @@ if is_torch_available():
         CamembertForSequenceClassification,
         CamembertForMultipleChoice,
         CamembertForTokenClassification,
+        CamembertForQuestionAnswering,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model	
     from .modeling_t5 import (
         T5PreTrainedModel,
         T5Model,
-        T5WithLMHeadModel,
+        T5ForConditionalGeneration,
         load_tf_weights_in_t5,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
@@ -351,6 +358,7 @@ if is_tf_available():
         TFTransfoXLModel,
         TFTransfoXLLMHeadModel,
         TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TFAdaptiveEmbedding,
     )
 
     from .modeling_tf_xlnet import (
@@ -400,6 +408,13 @@ if is_tf_available():
         TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
+    from .modeling_tf_flaubert import (
+        TFFlaubertModel,
+        TFFlaubertWithLMHeadModel,
+        TFFlaubertForSequenceClassification,
+        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
     from .modeling_tf_distilbert import (
         TFDistilBertPreTrainedModel,
         TFDistilBertMainLayer,
@@ -420,6 +435,7 @@ if is_tf_available():
 
     from .modeling_tf_albert import (
         TFAlbertPreTrainedModel,
+        TFAlbertMainLayer,
         TFAlbertModel,
         TFAlbertForMaskedLM,
         TFAlbertForSequenceClassification,
@@ -429,7 +445,7 @@ if is_tf_available():
     from .modeling_tf_t5 import (
         TFT5PreTrainedModel,
         TFT5Model,
-        TFT5WithLMHeadModel,
+        TFT5ForConditionalGeneration,
         TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
