@@ -7,6 +7,7 @@ import regex as re
 from faker.factory import Factory
 from fire import Fire
 
+
 SPACES = re.compile(r"\s+")
 FAKE = Factory.create()
 FAKE.seed(0)
