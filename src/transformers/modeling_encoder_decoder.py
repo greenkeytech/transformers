@@ -174,6 +174,7 @@ class PreTrainedEncoderDecoder(nn.Module):
             directory
             for directory in os.listdir(save_directory)
             if os.path.isdir(os.path.join(save_directory, directory))
+            and not directory.startswith("checkpoint-")
         ]
 
         if len(sub_directories) > 0:
@@ -186,7 +187,7 @@ class PreTrainedEncoderDecoder(nn.Module):
             # Empty the output directory
             for directory_to_remove in sub_directories:
                 # Remove all files into the subdirectory
-                files_to_remove = os.listdir(os.path.join(save_directory, directory_to_remove))
+                files_to_remove = [f for f in os.listdir(os.path.join(save_directory, directory_to_remove)) if os.path.isfile(f)]
                 for file_to_remove in files_to_remove:
                     os.remove(os.path.join(save_directory, directory_to_remove, file_to_remove))
                 # Remove the subdirectory itself
@@ -202,7 +203,7 @@ class PreTrainedEncoderDecoder(nn.Module):
             os.mkdir(os.path.join(save_directory, "decoder"))
         self.decoder.save_pretrained(os.path.join(save_directory, "decoder"))
 
-    def forward(self, encoder_input_ids, decoder_input_ids, **kwargs):
+    def forward(self, input_ids, **kwargs):
         """ The forward pass on a seq2eq depends what we are performing:
 
         - During training we perform one forward pass through both the encoder
@@ -215,10 +216,8 @@ class PreTrainedEncoderDecoder(nn.Module):
         `encoder_hidden_state` is passed to this function.
 
         Params:
-            encoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
+            input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
                 Indices of encoder input sequence tokens in the vocabulary.
-            decoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
-                Indices of decoder input sequence tokens in the vocabulary.
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
         """
         kwargs_encoder, kwargs_decoder = self.prepare_model_kwargs(**kwargs)
@@ -226,7 +225,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         # Encode if needed (training, first prediction pass)
         encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
         if encoder_hidden_states is None:
-            encoder_outputs = self.encoder(encoder_input_ids, **kwargs_encoder)
+            encoder_outputs = self.encoder(input_ids, **kwargs_encoder)
             encoder_hidden_states = encoder_outputs[0]
         else:
             encoder_outputs = ()

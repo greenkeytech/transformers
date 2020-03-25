@@ -57,8 +57,9 @@ export MODEL_TYPE=gpt2
 export MODEL_NAME=gpt2
 export NUM_EPOCHS=1
 export OUTPUT_DIR="date_${MODEL_TYPE}"
-export BATCH_SIZE=64
-export SAVE_STEPS=750
+export BATCH_SIZE=32
+export SAVE_STEPS=100
+export LOGGING_STEPS=50
 export SEED=1
 ```
 
@@ -78,6 +79,8 @@ python3 run_seq2seq.py \
   --num_train_epochs $NUM_EPOCHS \
   --per_gpu_train_batch_size $BATCH_SIZE \
   --save_steps $SAVE_STEPS \
+  --logging_steps $LOGGING_STEPS \
+  --eval_all_checkpoints \
   --seed $SEED \
   --do_train \
   --do_eval \

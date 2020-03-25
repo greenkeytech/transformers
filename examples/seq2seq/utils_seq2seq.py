@@ -74,10 +74,10 @@ class InputFeatures(object):
     """A single set of features of data."""
 
     def __init__(
-        self, encoder_input_ids, decoder_input_ids, input_mask, output_mask, segment_ids, formatted_tokens,
+        self, input_ids, output_ids, input_mask, output_mask, segment_ids, formatted_tokens,
     ):
-        self.encoder_input_ids = encoder_input_ids
-        self.decoder_input_ids = decoder_input_ids
+        self.input_ids = input_ids
+        self.output_ids = output_ids
         self.input_mask = input_mask
         self.output_mask = output_mask
         self.segment_ids = segment_ids
@@ -162,41 +162,42 @@ def convert_examples_to_features(
             formatted_tokens = [pad_token_label_id] + formatted_tokens
             segment_ids = [cls_token_segment_id] + segment_ids
 
-        encoder_input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        decoder_input_ids = tokenizer.convert_tokens_to_ids(formatted_tokens)
+        input_ids = tokenizer.convert_tokens_to_ids(tokens)
+        output_ids = tokenizer.convert_tokens_to_ids(formatted_tokens)
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
-        input_mask = [1 if mask_padding_with_zero else 0] * len(encoder_input_ids)
-        output_mask = [1 if mask_padding_with_zero else 0] * len(decoder_input_ids)
+        input_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
+        output_mask = [1 if mask_padding_with_zero else 0] * len(output_ids)
 
         # Zero-pad up to the sequence length.
-        input_padding_length = max_seq_length - len(encoder_input_ids)
-        output_padding_length = max_seq_length - len(decoder_input_ids)
+        input_padding_length = max_seq_length - len(input_ids)
+        output_padding_length = max_seq_length - len(output_ids)
 
         # pad from the left this time
         if model_type in ["xlnet"]:
-            encoder_input_ids = ([pad_token] * input_padding_length) + encoder_input_ids
-            decoder_input_ids = ([pad_token] * output_padding_length) + decoder_input_ids
+            input_ids = ([pad_token] * input_padding_length) + input_ids
+            output_ids = ([pad_token] * output_padding_length) + output_ids
             input_mask = ([0 if mask_padding_with_zero else 1] * input_padding_length) + input_mask
             output_mask = ([0 if mask_padding_with_zero else 1] * output_padding_length) + output_mask
             segment_ids = ([pad_token_segment_id] * input_padding_length) + segment_ids
             formatted_tokens = ([pad_token_label_id] * output_padding_length) + formatted_tokens
         # pad from the right this time
         else:
-            encoder_input_ids += [pad_token] * input_padding_length
-            decoder_input_ids += [pad_token] * output_padding_length
+            input_ids += [pad_token] * input_padding_length
+            output_ids += [pad_token] * output_padding_length
             input_mask += [0 if mask_padding_with_zero else 1] * input_padding_length
             output_mask += [0 if mask_padding_with_zero else 1] * output_padding_length
             segment_ids += [pad_token_segment_id] * input_padding_length
             formatted_tokens += [pad_token_label_id] * output_padding_length
 
         # sanity checks
-        assert all(token_id is not None for token_id in encoder_input_ids)
-        assert all(token_id is not None for token_id in decoder_input_ids)
-        assert len(encoder_input_ids) == max_seq_length
+        assert all(token_id is not None for token_id in input_ids)
+        assert all(token_id is not None for token_id in output_ids)
+        
+        assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
-        assert len(decoder_input_ids) == max_seq_length
+        assert len(output_ids) == max_seq_length
         assert len(output_mask) == max_seq_length
         assert len(segment_ids) == max_seq_length
         assert len(formatted_tokens) == max_seq_length
@@ -206,16 +207,16 @@ def convert_examples_to_features(
             logger.info("guid: %s", example.guid)
             logger.info("tokens: %s", " ".join([str(x) for x in tokens]))
             logger.info("formatted_tokens: %s", " ".join([str(x) for x in formatted_tokens]))
-            logger.info("encoder_input_ids: %s", " ".join([str(x) for x in encoder_input_ids]))
-            logger.info("decoder_input_ids: %s", " ".join([str(x) for x in decoder_input_ids]))
+            logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
+            logger.info("output_ids: %s", " ".join([str(x) for x in output_ids]))
             logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
             logger.info("output_mask: %s", " ".join([str(x) for x in output_mask]))
             logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
 
         features.append(
             InputFeatures(
-                encoder_input_ids=encoder_input_ids,
-                decoder_input_ids=decoder_input_ids,
+                input_ids=input_ids,
+                output_ids=output_ids,
                 input_mask=input_mask,
                 output_mask=output_mask,
                 segment_ids=segment_ids,
