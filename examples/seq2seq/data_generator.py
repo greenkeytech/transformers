@@ -77,25 +77,30 @@ def ord(n):
 
 
 def day_num_to_str(day_num):
-    return (
-        CONSTANTS["ordinal_dict"][day_num]
-        if random.random() > 0.5
-        else (ord(day_num) if random.random() > 0.5 else str(day_num))
-    )
+    return str(day_num)
+    # return (
+    #     CONSTANTS["ordinal_dict"][day_num]
+    #     if random.random() > 0.5
+    #     else (ord(day_num) if random.random() > 0.5 else str(day_num))
+    # )
 
 
 def truncate_year(year_num):
-    return str(year_num)[-2:] if year_num > 2000 and random.random() > 0.3 else str(year_num)
+    # return str(year_num)[-2:] if year_num > 2000 and random.random() > 0.3 else str(year_num)
+    return str(year_num)
 
 
 def make_date():
-    output = FAKE.date(pattern="%d/%m/%Y")
-    day, month, year = map(int, output.split("/"))
+    # output = FAKE.date(pattern="%d/%m/%Y")
+    output = FAKE.date(pattern="%m")+"/{}".format(random.randint(2000,2020))
+    month, year = map(int, output.split("/"))
+    output ="03/"+output
+    day=3
     inp = " ".join([day_num_to_str(day), month_num_to_abbrev(month), truncate_year(year)])
     return (inp, output)
 
 
-def make_training_data(train_size=10000, dev_size=1000, test_size=1000):
+def make_training_data(train_size=50000, dev_size=1000, test_size=1000):
     for output, size in zip(("train", "dev", "test"), (train_size, dev_size, test_size)):
         with open("{}.txt".format(output), "w") as output_file:
             for _ in range(size):

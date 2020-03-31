@@ -40,6 +40,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
+        # self.linear = linear
 
     @classmethod
     def from_pretrained(
@@ -116,29 +117,8 @@ class PreTrainedEncoderDecoder(nn.Module):
         # keyword arguments come in 3 flavors: encoder-specific (prefixed by
         # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
         # that apply to the model as a whole.
-        # We let the specific kwargs override the common ones in case of conflict.
-        kwargs_common = {
-            argument: value
-            for argument, value in kwargs.items()
-            if not argument.startswith("encoder_") and not argument.startswith("decoder_")
-        }
-        kwargs_decoder = kwargs_common.copy()
-        kwargs_encoder = kwargs_common.copy()
-        kwargs_encoder.update(
-            {
-                argument[len("encoder_") :]: value
-                for argument, value in kwargs.items()
-                if argument.startswith("encoder_")
-            }
-        )
-        kwargs_decoder.update(
-            {
-                argument[len("decoder_") :]: value
-                for argument, value in kwargs.items()
-                if argument.startswith("decoder_")
-            }
-        )
-
+        # kwargs_encoder, kwargs_decoder, kwargs_linear = self.prepare_model_kwargs(**kwargs)
+        kwargs_encoder, kwargs_decoder = cls.prepare_model_kwargs(**kwargs)
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
         # by the value of the flag `is_decoder` that we need to set correctly.
@@ -154,6 +134,14 @@ class PreTrainedEncoderDecoder(nn.Module):
             kwargs_decoder["config"] = decoder_config
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
+        # linear = kwargs_linear.pop("model", None)
+        # if linear is None: 
+        #     linear = torch.load(linear_pretrained_model_name_or_path)
+        # else:
+        #     embedding_size = encoder.config.n_embd
+        #     linear = nn.Linear(embedding_size, embedding_size, bias=True)
+
+        # model = cls(encoder, decoder, linear)
         model = cls(encoder, decoder)
 
         return model
@@ -203,6 +191,8 @@ class PreTrainedEncoderDecoder(nn.Module):
             os.mkdir(os.path.join(save_directory, "decoder"))
         self.decoder.save_pretrained(os.path.join(save_directory, "decoder"))
 
+        # torch.save(self.linear, os.path.join(save_directory, "linear"))
+
     def forward(self, input_ids, **kwargs):
         """ The forward pass on a seq2eq depends what we are performing:
 
@@ -220,6 +210,7 @@ class PreTrainedEncoderDecoder(nn.Module):
                 Indices of encoder input sequence tokens in the vocabulary.
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
         """
+        # kwargs_encoder, kwargs_decoder, kwargs_linear = self.prepare_model_kwargs(**kwargs)
         kwargs_encoder, kwargs_decoder = self.prepare_model_kwargs(**kwargs)
 
         # Encode if needed (training, first prediction pass)
@@ -233,6 +224,7 @@ class PreTrainedEncoderDecoder(nn.Module):
         if "BERT" in str(type(self.decoder)).upper():
             kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
 
+        # decoder_outputs = self.decoder(inputs_embeds=self.linear.forward(encoder_hidden_states), **kwargs_decoder)
         decoder_outputs = self.decoder(inputs_embeds=encoder_hidden_states, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
@@ -247,25 +239,35 @@ class PreTrainedEncoderDecoder(nn.Module):
         We let the specific kwargs override the common ones in case of  
         conflict.   
         """
+        # We let the specific kwargs override the common ones in case of conflict.
         kwargs_common = {
             argument: value
             for argument, value in kwargs.items()
             if not argument.startswith("encoder_") and not argument.startswith("decoder_")
         }
-        decoder_kwargs = kwargs_common.copy()
-        encoder_kwargs = kwargs_common.copy()
-        encoder_kwargs.update(
+        kwargs_encoder = kwargs_common.copy()
+        kwargs_decoder = kwargs_common.copy()
+        kwargs_linear = kwargs_common.copy()
+        kwargs_encoder.update(
             {
                 argument[len("encoder_") :]: value
                 for argument, value in kwargs.items()
                 if argument.startswith("encoder_")
             }
         )
-        decoder_kwargs.update(
+        kwargs_decoder.update(
             {
                 argument[len("decoder_") :]: value
                 for argument, value in kwargs.items()
                 if argument.startswith("decoder_")
             }
         )
-        return encoder_kwargs, decoder_kwargs
+        kwargs_linear.update(
+            {
+                argument[len("linear_") :]: value
+                for argument, value in kwargs.items()
+                if argument.startswith("linear_")
+            }
+        )
+
+        return kwargs_encoder, kwargs_decoder #, kwargs_linear

@@ -83,8 +83,13 @@ def train(args, train_dataset, model, tokenizer, pad_token_label_id):
         },
         {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
     ]
-    # optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    optimizer = Lamb(optimizer_grouped_parameters)#, lr=args.learning_rate, eps=args.adam_epsilon)
+    if args.optimizer.lower()=="adamw":
+        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    elif args.optimizer.lower()=="lamb":
+        optimizer = Lamb(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    else:
+        raise Exception("Invalid optimizer specified")
+  
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )
@@ -168,7 +173,7 @@ def train(args, train_dataset, model, tokenizer, pad_token_label_id):
             input_ids, output_ids, input_mask, output_mask, _ = batch
 
             # add other inputs here, including kwargs
-            inputs = {"input_ids": input_ids, "attention_mask": input_mask}
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "decoder_attention_mask": output_mask}
             if args.model_type != "distilbert":
                 inputs["token_type_ids"] = (
                     batch[2] if args.model_type in ["bert", "xlnet"] else None
@@ -184,7 +189,6 @@ def train(args, train_dataset, model, tokenizer, pad_token_label_id):
 
             vocab_size = decoder_predictions.shape[-1]
 
-            loss_fct = CrossEntropyLoss()
 
             # # Only keep active parts of the loss
             # if output_mask is not None:
@@ -196,6 +200,9 @@ def train(args, train_dataset, model, tokenizer, pad_token_label_id):
             #     loss = loss_fct(active_logits, active_output_ids)
             # else:
             #     loss = loss_fct(decoder_predictions.view(-1, vocab_size), output_ids.view(-1))
+            loss_weights = torch.ones(vocab_size).to(output_ids.device)
+            loss_weights[tokenizer.pad_token_id-1]=0.05
+            loss_fct = CrossEntropyLoss(weight=loss_weights)
 
             loss = loss_fct(
                     decoder_predictions.view(-1, vocab_size), 
@@ -230,7 +237,7 @@ def train(args, train_dataset, model, tokenizer, pad_token_label_id):
                     if (
                         args.local_rank == -1 and args.evaluate_during_training
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
-                        results, _ = evaluate(args, model, tokenizer, pad_token_label_id, mode="dev")
+                        results, _ = evaluate(args, model.to("cuda:0"), tokenizer, pad_token_label_id, mode="dev")
                         for key, value in results.items():
                             tb_writer.add_scalar("eval_{}".format(key), value, global_step)
                     tb_writer.add_scalar("lr", scheduler.get_lr()[0], global_step)
@@ -332,8 +339,12 @@ def evaluate(args, model, tokenizer, pad_token_label_id, mode, prefix=""):
     out_ids = out_ids.flatten()
     unflattened_preds = deepcopy(preds)
     preds = preds.flatten()
-    preds=preds[np.where(preds!=tokenizer.pad_token_id)[0]]
-    out_ids=out_ids[np.where(preds!=tokenizer.pad_token_id)[0]]
+    target_tokens = np.where(out_ids!=tokenizer.pad_token_id)[0]
+    preds=preds[target_tokens]
+    out_ids=out_ids[target_tokens]
+    
+    preds.dump("predictions.npy")
+    out_ids.dump("truth.npy")
 
     results = {
         "loss": eval_loss,
@@ -473,6 +484,9 @@ def main():
         "--per_gpu_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.",
     )
     parser.add_argument(
+        "--optimizer", default="lamb", type=str, help="Optimizer (AdamW or lamb)",
+    )
+    parser.add_argument(
         "--gradient_accumulation_steps",
         type=int,
         default=1,
@@ -481,7 +495,7 @@ def main():
     parser.add_argument(
         "--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.",
     )
-    parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
+    parser.add_argument("--weight_decay", default=0.01, type=float, help="Weight decay - default from AdamW")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument(
