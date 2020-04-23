@@ -130,7 +130,7 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
                 # type_vocab_size=self.type_vocab_size,
                 # initializer_range=self.initializer_range
                 bos_token_id=self.bos_token_id,
-                eos_token_ids=self.eos_token_id,
+                eos_token_id=self.eos_token_id,
             )
 
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -191,7 +191,7 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
             output_from_past_slice = output_from_past[:, 0, random_slice_idx]
 
             # test that outputs are equal for slice
-            tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-12)
+            tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
 
         def create_and_check_gpt2_model_attention_mask_past(
             self, config, input_ids, input_mask, head_mask, token_type_ids, *args

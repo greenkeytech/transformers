@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
@@ -25,33 +24,19 @@ import random
 
 import numpy as np
 import torch
-from seqeval.metrics import f1_score, precision_score, recall_score, classification_report
+from seqeval.metrics import f1_score, precision_score, recall_score
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from transformers import (
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     WEIGHTS_NAME,
     AdamW,
-    AlbertConfig,
-    AlbertForTokenClassification,
-    AlbertTokenizer,
-    BertConfig,
-    BertForTokenClassification,
-    BertTokenizer,
-    CamembertConfig,
-    CamembertForTokenClassification,
-    CamembertTokenizer,
-    DistilBertConfig,
-    DistilBertForTokenClassification,
-    DistilBertTokenizer,
-    RobertaConfig,
-    RobertaForTokenClassification,
-    RobertaTokenizer,
-    XLMRobertaConfig,
-    XLMRobertaForTokenClassification,
-    XLMRobertaTokenizer,
+    AutoConfig,
+    AutoModelForTokenClassification,
+    AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
@@ -65,22 +50,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-ALL_MODELS = sum(
-    (
-        tuple(conf.pretrained_config_archive_map.keys())
-        for conf in (BertConfig, RobertaConfig, DistilBertConfig, CamembertConfig, XLMRobertaConfig)
-    ),
-    (),
-)
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
-MODEL_CLASSES = {
-    "albert": (AlbertConfig, AlbertForTokenClassification, AlbertTokenizer),
-    "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
-    "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
-    "camembert": (CamembertConfig, CamembertForTokenClassification, CamembertTokenizer),
-    "xlmroberta": (XLMRobertaConfig, XLMRobertaForTokenClassification, XLMRobertaTokenizer),
-}
+ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in MODEL_CONFIG_CLASSES), ())
 
 TOKENIZER_ARGS = ["do_lower_case", "strip_accents", "keep_accents", "use_fast"]
 
@@ -166,10 +139,10 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     steps_trained_in_current_epoch = 0
     # Check if continuing training from a checkpoint
     if os.path.exists(args.model_name_or_path):
-        # set global_step to global_step of last saved checkpoint from model path
-        if args.model_name_or_path.split("-")[-1].split("/")[0].isdigit():
+        # set global_step to gobal_step of last saved checkpoint from model path
+        try:
             global_step = int(args.model_name_or_path.split("-")[-1].split("/")[0])
-        else:
+        except ValueError:
             global_step = 0
         epochs_trained = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
         steps_trained_in_current_epoch = global_step % (len(train_dataloader) // args.gradient_accumulation_steps)
@@ -184,7 +157,7 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     train_iterator = trange(
         epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
     )
-    set_seed(args)  # Added here for reproducibility
+    set_seed(args)  # Added here for reproductibility
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
@@ -223,8 +196,8 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                 else:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
 
-                scheduler.step()  # Update learning rate schedule
                 optimizer.step()
+                scheduler.step()  # Update learning rate schedule
                 model.zero_grad()
                 global_step += 1
 
@@ -335,7 +308,6 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
         "precision": precision_score(out_label_list, preds_list),
         "recall": recall_score(out_label_list, preds_list),
         "f1": f1_score(out_label_list, preds_list),
-        "report": "\n" + classification_report(out_label_list, preds_list, digits=3),
     }
 
     logger.info("***** Eval results %s *****", prefix)
@@ -376,8 +348,8 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
             # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
             pad_on_left=bool(args.model_type in ["xlnet"]),
             # pad on the left for xlnet
-            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-            pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
+            pad_token=tokenizer.pad_token_id,
+            pad_token_segment_id=tokenizer.pad_token_type_id,
             pad_token_label_id=pad_token_label_id,
         )
         if args.local_rank in [-1, 0]:
@@ -413,7 +385,7 @@ def main():
         default=None,
         type=str,
         required=True,
-        help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
+        help="Model type selected in the list: " + ", ".join(MODEL_TYPES),
     )
     parser.add_argument(
         "--model_name_or_path",
@@ -516,9 +488,6 @@ def main():
     parser.add_argument(
         "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
-    parser.add_argument(
-        "--has_new_labels", action="store_true", help="Tells the trainer that more labels are present than in the pretrained model."
-    )
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
     parser.add_argument(
@@ -599,83 +568,26 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     args.model_type = args.model_type.lower()
-    config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+    config = AutoConfig.from_pretrained(
+        args.config_name if args.config_name else args.model_name_or_path,
+        num_labels=num_labels,
+        id2label={str(i): label for i, label in enumerate(labels)},
+        label2id={label: i for i, label in enumerate(labels)},
+        cache_dir=args.cache_dir if args.cache_dir else None,
+    )
     tokenizer_args = {k: v for k, v in vars(args).items() if v is not None and k in TOKENIZER_ARGS}
     logger.info("Tokenizer arguments: %s", tokenizer_args)
-    tokenizer = tokenizer_class.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(
         args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
         cache_dir=args.cache_dir if args.cache_dir else None,
         **tokenizer_args,
     )
-
-    if args.has_new_labels and os.path.exists(args.model_name_or_path):
-        old_config = config_class.from_pretrained(
-            args.config_name if args.config_name else args.model_name_or_path,
-            cache_dir=args.cache_dir if args.cache_dir else None,
-        )
-        old_model = model_class.from_pretrained(
-            args.model_name_or_path,
-            from_tf=bool(".ckpt" in args.model_name_or_path),
-            config=old_config,
-            cache_dir=args.cache_dir if args.cache_dir else None,
-        )
-        old_num_labels = old_config.num_labels
-        new_labels = [label for label in labels if label not in old_config.label2id.keys()]
-        id2label = {**old_config.id2label, **{i + old_num_labels: label for i, label in enumerate(new_labels)}}
-        label2id = {**old_config.label2id, **{label: i + old_num_labels for i, label in enumerate(new_labels)}}
-        config = config_class.from_pretrained(
-            args.config_name if args.config_name else args.model_name_or_path,
-            num_labels=num_labels,
-            id2label=id2label,
-            label2id=label2id,
-            cache_dir=args.cache_dir if args.cache_dir else None,
-        )
-
-        model = model_class(config)
-
-        params_old = old_model.named_parameters()
-        params_new = model.named_parameters()
-        dict_params_old = dict(params_old)
-        dict_params_new = dict(params_new)
-        old_labels = list(old_config.label2id.keys())
-        new_labels = list(config.label2id.keys())
-        logger.info("Old labels %s", old_labels)
-        logger.info("New labels %s", new_labels)
-        sort_keys = np.argsort(new_labels)
-        for param_name, param_old in dict_params_old.items():
-            if param_name in dict_params_new:
-                if param_name.startswith('classifier'):
-                    # not only do the dimensions differ when adding a new label
-                    # but something resorts the labels (apparently alphabetically)
-                    # and uses that resorted list to determine the matrix structure
-                    # so we should apply that logic here explicitly
-                    for target_idx, current_idx in enumerate(sort_keys):
-                        target_label = new_labels[current_idx]
-                        if target_label in old_labels:
-                            idx_in_old_weights = old_labels.index(target_label)
-                            dict_params_new[param_name].data[target_idx].copy_(param_old.data[idx_in_old_weights])
-                else:
-                    dict_params_new[param_name].data.copy_(param_old.data)
-
-        model.load_state_dict(dict_params_new)
-
-    elif args.has_new_labels:
-        raise Exception("You have specified you're adding new labels but not provided a base model")
-    else:
-        config = config_class.from_pretrained(
-            args.config_name if args.config_name else args.model_name_or_path,
-            num_labels=num_labels,
-            id2label={str(i): label for i, label in enumerate(labels)},
-            label2id={label: i for i, label in enumerate(labels)},
-            cache_dir=args.cache_dir if args.cache_dir else None,
-        )
-
-        model = model_class.from_pretrained(
-            args.model_name_or_path,
-            from_tf=bool(".ckpt" in args.model_name_or_path),
-            config=config,
-            cache_dir=args.cache_dir if args.cache_dir else None,
-        )
+    model = AutoModelForTokenClassification.from_pretrained(
+        args.model_name_or_path,
+        from_tf=bool(".ckpt" in args.model_name_or_path),
+        config=config,
+        cache_dir=args.cache_dir if args.cache_dir else None,
+    )
 
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
@@ -711,7 +623,7 @@ def main():
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, **tokenizer_args)
+        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(
@@ -721,31 +633,31 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
-            model = model_class.from_pretrained(checkpoint)
+            model = AutoModelForTokenClassification.from_pretrained(checkpoint)
             model.to(args.device)
             result, _ = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="dev", prefix=global_step)
             if global_step:
                 result = {"{}_{}".format(global_step, k): v for k, v in result.items()}
             results.update(result)
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-        with open(output_eval_file, "w", encoding="utf-8") as writer:
+        with open(output_eval_file, "w") as writer:
             for key in sorted(results.keys()):
                 writer.write("{} = {}\n".format(key, str(results[key])))
 
     if args.do_predict and args.local_rank in [-1, 0]:
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, **tokenizer_args)
-        model = model_class.from_pretrained(args.output_dir)
+        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, **tokenizer_args)
+        model = AutoModelForTokenClassification.from_pretrained(args.output_dir)
         model.to(args.device)
         result, predictions = evaluate(args, model, tokenizer, labels, pad_token_label_id, mode="test")
         # Save results
         output_test_results_file = os.path.join(args.output_dir, "test_results.txt")
-        with open(output_test_results_file, "w", encoding="utf-8") as writer:
+        with open(output_test_results_file, "w") as writer:
             for key in sorted(result.keys()):
                 writer.write("{} = {}\n".format(key, str(result[key])))
         # Save predictions
         output_test_predictions_file = os.path.join(args.output_dir, "test_predictions.txt")
-        with open(output_test_predictions_file, "w", encoding="utf-8") as writer:
-            with open(os.path.join(args.data_dir, "test.txt"), "r", encoding="utf-8") as f:
+        with open(output_test_predictions_file, "w") as writer:
+            with open(os.path.join(args.data_dir, "test.txt"), "r") as f:
                 example_id = 0
                 for line in f:
                     if line.startswith("-DOCSTART-") or line == "" or line == "\n":
