@@ -1,3 +1,4 @@
+
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
@@ -18,8 +19,7 @@
 import logging
 from typing import Optional
 
-from .configuration_encoder_decoder import EncoderDecoderConfig
-from .configuration_utils import PretrainedConfig
+from .modeling_auto import AutoModel, AutoModelWithLMHead
 from .modeling_utils import PreTrainedModel
 
 
@@ -64,33 +64,41 @@ class EncoderDecoderModel(PreTrainedModel):
 
             decoder = AutoModelWithLMHead.from_config(config.decoder)
 
-        self.encoder = encoder
-        self.decoder = decoder
-        assert (
-            self.encoder.get_output_embeddings() is None
-        ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
+    def __init__(self, encoder, decoder):
+        assert encoder is not None, "The encoder has to be defined"
+        assert decoder is not None, "The encoder has to be defined"
 
-    def tie_weights(self):
-        # for now no weights tying in encoder-decoder
-        pass
+        # TODO: think about how to handle the config
+        config = self._init_config(encoder.config, decoder.config)
+        super().__init__(config)
+
+        import ipdb
+        ipdb.set_trace()
+
+        self.encoder = encoder
+        assert self.encoder.get_output_embeddings() is None, "The encoder {} should not have a LM Head. Please use a model without LM Head"
+        self.decoder = decoder
+        self.is_encoder_decoder = True
+
+    def _init_config(self, encoder_config, decoder_config):
+        # TODO: correct the function here
+        # Seq-2-Seq should have at least same word embeddings for encoder and decoder
+        # so all special tokens should be the same
+        assert encoder_config.pad_token_id == decoder_config.pad_token_id
+        assert encoder_config.bos_token_id == decoder_config.bos_token_id
+        assert encoder_config.eos_token_id == decoder_config.eos_token_id
+        assert encoder_config.vocab_size == decoder_config.vocab_size
+
+        return decoder_config
 
     def get_encoder(self):
         return self.encoder
 
-    def get_decoder(self):
-        return self.decoder
-
-    def get_input_embeddings(self):
-        return self.encoder.get_input_embeddings()
-
-    def get_output_embeddings(self):
-        return self.decoder.get_output_embeddings()
-
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path: str = None,
-        decoder_pretrained_model_name_or_path: str = None,
+        pretrained_model_name_or_path=None,
+        decoder_pretrained_model_name_or_path=None,
         *model_args,
         **kwargs
     ) -> PreTrainedModel:
@@ -130,12 +138,21 @@ class EncoderDecoderModel(PreTrainedModel):
             model = EncoderDecoder.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
         """
 
+        # keyword arguments come in 3 flavors: encoder-specific (prefixed by
+        # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
+        # that apply to the model as a whole.
+        # We let the specific kwargs override the common ones in case of conflict.
+
         kwargs_encoder = {
-            argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
+            argument: value
+            for argument, value in kwargs.items()
+            if not argument.startswith("decoder_")
         }
 
         kwargs_decoder = {
-            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+            argument[len("decoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("decoder_")
         }
 
         # Load and initialize the encoder and decoder
@@ -143,20 +160,15 @@ class EncoderDecoderModel(PreTrainedModel):
         # by the value of the flag `is_decoder` that we need to set correctly.
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
-            assert (
-                encoder_pretrained_model_name_or_path is not None
-            ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
-            from .modeling_auto import AutoModel
-
-            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+            assert pretrained_model_name_or_path is not None, "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+            encoder = AutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs_encoder)
         encoder.config.is_decoder = False
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
-            assert (
-                decoder_pretrained_model_name_or_path is not None
-            ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
-            from .modeling_auto import AutoModelWithLMHead
+            assert decoder_pretrained_model_name_or_path is not None, "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+
+            # TODO: Maybe make two classes 1) AutoModel 2) AutoModelWithLMHead
 
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
         decoder.config.is_decoder = True
@@ -233,39 +245,70 @@ class EncoderDecoderModel(PreTrainedModel):
                 - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
                 - With a `decoder_` prefix which will be input as `**decoder_kwargs` for the decoder forward function.
 
-        Examples::
+        # If the root output directory does not exist, create it
+        if not os.path.exists(save_directory):
+            os.mkdir(save_directory)
 
-            from transformers import EncoderDecoderModel, BertTokenizer
-            import torch
+        # Check whether the output directory is empty or not
+        sub_directories = [
+            directory
+            for directory in os.listdir(save_directory)
+            if os.path.isdir(os.path.join(save_directory, directory))
+        ]
 
-            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
+        if len(sub_directories) > 0:
+            if "encoder" in sub_directories and "decoder" in sub_directories:
+                print(
+                    "WARNING: there is an older version of encoder-decoder saved in"
+                    + " the output directory. The default behaviour is to overwrite them."
+                )
 
-            # forward
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+            # Empty the output directory
+            for directory_to_remove in sub_directories:
+                # Remove all files into the subdirectory
+                files_to_remove = os.listdir(os.path.join(save_directory, directory_to_remove))
+                for file_to_remove in files_to_remove:
+                    os.remove(os.path.join(save_directory, directory_to_remove, file_to_remove))
+                # Remove the subdirectory itself
+                os.rmdir(os.path.join(save_directory, directory_to_remove))
 
-            # training
-            loss, outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, lm_labels=input_ids)[:2]
+            assert len(os.listdir(save_directory)) == 0  # sanity check
 
-            # generation
-            generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+        # Create the "encoder" directory inside the output directory and save the encoder into it
+        if not os.path.exists(os.path.join(save_directory, "encoder")):
+            os.mkdir(os.path.join(save_directory, "encoder"))
+        self.encoder.save_pretrained(os.path.join(save_directory, "encoder"))
+
+        # Create the "encoder" directory inside the output directory and save the decoder into it
+        if not os.path.exists(os.path.join(save_directory, "decoder")):
+            os.mkdir(os.path.join(save_directory, "decoder"))
+        self.decoder.save_pretrained(os.path.join(save_directory, "decoder"))
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        encoder_outputs=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        lm_labels=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        head_mask=None,
+    ):
 
         """
-
-        kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
-
-        kwargs_decoder = {
-            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
-        }
+        Params:
+            encoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
+                Indices of encoder input sequence tokens in the vocabulary.
+            decoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
+                Indices of decoder input sequence tokens in the vocabulary.
+            kwargs: (`optional`) Remaining dictionary of keyword arguments.
+        """
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
-                **kwargs_encoder,
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
             )
 
         hidden_states = encoder_outputs[0]
@@ -274,13 +317,10 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             inputs_embeds=decoder_inputs_embeds,
-            attention_mask=decoder_attention_mask,
+            attention_mask=attention_mask,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            lm_labels=lm_labels,
-            masked_lm_labels=masked_lm_labels,
-            **kwargs_decoder,
+            head_mask=head_mask
         )
 
         return decoder_outputs + encoder_outputs
@@ -294,16 +334,15 @@ class EncoderDecoderModel(PreTrainedModel):
         else:
             encoder_outputs = (past,)
 
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids)
+        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, attention_mask)
 
         return {
-            "attention_mask": attention_mask,
-            "decoder_attention_mask": decoder_inputs["attention_mask"],
-            "decoder_input_ids": decoder_inputs["input_ids"],
+            "decoder_input_ids": decoder_inputs['input_ids'],
             "encoder_outputs": encoder_outputs,
+            "attention_mask": decoder_inputs['attention_mask'],
         }
 
     def _reorder_cache(self, past, beam_idx):
-        # as a default encoder-decoder models do not re-order the past.
-        # TODO(PVP): might have to be updated, e.g. if GPT2 is to be used as a decoder
+        # as a default encoder-decoder models do not re-order the past. TODO: might
+        # have to be updated, e.g. if GPT2 is to be used as a decoder
         return past
